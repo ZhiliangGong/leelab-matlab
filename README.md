@@ -1,2 +1,2 @@
-# Lee Lab Matlab code repo
-## Collects our commonly used Matlab code
+## Lee Lab Matlab code repo
+Collects our commonly used Matlab code

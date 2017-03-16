@@ -19,8 +19,7 @@ classdef Isotherm < handle
             try
                 this.raw = importdata(file);
                 this.time = this.raw.data(:, 1);
-                this.area = this.raw.data(:, 2);
-                this.molArea = this.raw.data(:, 3);
+                this.are
             catch EM
                 disp(EM);
             end
