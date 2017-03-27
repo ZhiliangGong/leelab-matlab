@@ -6,22 +6,28 @@ classdef Reflectivity < handle
         input
         offset
         
+        ed
+        
     end
     
     methods
         
-        function this = Reflectivity(p_buff, energy, file)
+        function this = Reflectivity(p_buff, energy, dataFile)
+            % assumes the ed profiles to be in a sub-folder called
+            % 'ed-profiles'
             
             this.input.p_buff = p_buff;
             this.input.energy = energy;
             
             if nargin == 2
                 [filename, pathname, ~] = uigetfile('.txt', 'Select the raw reflectivity file.');
-                file = [pathname, filename];
+                dataFile = fullfile(pathname, filename);
             end
             
-            this.rawdata = importdata(file);
+            this.rawdata = importdata(dataFile);
             this.calculateQc();
+            
+            this.importEdProfiles(fullfile(pathname, 'ed-profiles'));
             
         end
         
@@ -45,7 +51,7 @@ classdef Reflectivity < handle
             ProtFlag = 0;
             qzoff_edprofile = [];
             
-            qzoff_fit_func = @(x, xdata) this.qz_calc(x, xdata, qzoff_edprofile, this.input.p_buff, 3.4, this.input.qc, ProtFlag, this.rawdata);
+            qzoff_fit_func = @(x, xdata) this.Qz_calc(x, xdata, qzoff_edprofile, this.input.p_buff, 3.4, this.input.qc, ProtFlag, this.rawdata);
             
             [x, resnorm] = lsqcurvefit(qzoff_fit_func, x0, this.rawdata([2:4 (length(qc_cutoff_ind)+1):end],1),...
                 zeros(size(this.rawdata([2:4 (length(qc_cutoff_ind)+1):end],1))), lb, ub);
@@ -73,35 +79,70 @@ classdef Reflectivity < handle
             ub = [Inf, 0, 1, 100, 30, 100, 100];
             ProtFlag = 1;
             
-            currentFolder = pwd;
-            [edfile,PathName,~]  = uigetfile('*.ed','Select the ED file you want to read.');
-            if strcmp(PathName, [currentFolder, '\']) == 0
-                cd(PathName);
-                qzoff_edprofile = importdata(edfile);
-                cd(currentFolder);
-            else
-                qzoff_edprofile = importdata(edfile);
-            end
+            [edfile, PathName,~]  = uigetfile('*.ed', 'Select the ED file you want to read.');
+            qzoff_edprofile = importdata(fullfile(PathName, edfile));
             
-            qzoff_fit_func = @(x, xdata)Qz_calc(x, xdata, qzoff_edprofile, R.input.p_buff, 3.4, R.input.qc, ProtFlag, R.rawdata.ref);
+            qzoff_fit_func = @(x, xdata) this.Qz_calc(x, xdata, qzoff_edprofile, this.input.p_buff, 3.4, this.input.qc, ProtFlag, this.rawdata);
             
-            [x, resnorm] = lsqcurvefit(qzoff_fit_func, x0, R.rawdata.ref([2:4 (length(qc_cutoff_ind)+1):end],1),...
-                zeros(size(R.rawdata.ref([2:4 (length(qc_cutoff_ind)+1):end],1))), lb, ub, opts);
+            [x, resnorm] = lsqcurvefit(qzoff_fit_func, x0, this.rawdata([2:4 (length(qc_cutoff_ind)+1):end],1),...
+                zeros(size(this.rawdata([2:4 (length(qc_cutoff_ind)+1):end],1))), lb, ub);
             
             qzoff_min = x(1);
-            R.offset.chisqrd = resnorm;
+            this.offset.chisqrd = resnorm;
             
-            [ R.offset.ref, R.offset.refnorm, R.offset.refnormcut,~,~] = ...
-                Ref_reduce3_man(R.rawdata.ref,0.026,qzoff_min,R.input.qc);
+            [ this.offset.ref, this.offset.refnorm, this.offset.refnormcut,~,~] = ...
+                this.Ref_reduce3_man(this.rawdata,0.026,qzoff_min,this.input.qc);
             
-            R.input.qzoffset = qzoff_min;
-            R.offset.ref = R.rawdata.ref;
-            R.offset.ref(:,1) = R.offset.ref(:,1) - R.input.qzoffset;
-            fprintf('\n%s %f \n','The Qzoffset is:', R.input.qzoffset)
+            this.input.qzoffset = qzoff_min;
+            this.offset.ref = this.rawdata;
+            this.offset.ref(:,1) = this.offset.ref(:,1) - this.input.qzoffset;
+            fprintf('\n%s %f \n','The Qzoffset is:', this.input.qzoffset)
             
         end
         
         % utility
+        
+        function importEdProfiles(this, path)
+            
+            pattern = '^t\d\d\dp\d\d\d.ed$';
+            contents = dir(path);
+            
+            if isempty(contents)
+                path = uigetdir(pwd, 'Select the folder for ED files.');
+                contents = dir(path);
+            end
+            
+            isEdFile = false(1, length(contents));
+            allFiles = cell(1, length(contents));
+            for i = 1 : length(contents)
+                allFiles{i} = contents(i).name;
+                if regexp(contents(i).name, pattern) == 1
+                    isEdFile(i) = true;
+                end
+            end
+            
+            this.ed.path = path;
+            this.ed.files = allFiles(isEdFile);
+            
+            names = repmat('0', length(this.ed.files), length(this.ed.files{1}));
+            for n = 1 : length(this.ed.files)
+                names(n, :) = this.ed.files{n};
+            end
+            
+            theta = sort(str2num(names(:, 2 : 4)));
+            phi = sort(str2num(names(:, 6 : 8)));
+            
+            theta = theta(theta ~= [theta(end); theta(1 : end -1)]);
+            phi = phi(phi ~= [phi(end); phi(1 : end -1)]);
+            
+            if length(theta) * length(phi) ~= length(this.ed.files)
+                error('Some ed files are missing, or their names are incorrect');
+            else
+                this.ed.theta = theta;
+                this.ed.phi = phi;
+            end
+            
+        end
         
         function qzoff = getNaiveQzOffset(this)
             
@@ -135,7 +176,7 @@ classdef Reflectivity < handle
             
         end
         
-        function R = qz_calc(this, x, reflxaxis, prot_ed, p_buff, sigma, qc, ProtFlag, refl)
+        function R = Qz_calc(this, x, reflxaxis, prot_ed, p_buff, sigma, qc, ProtFlag, refl)
             % Function for fitting qz offset to 2 box model with/without protein
             
             [~, ~, Refl_Fresnel_qz_shift_cutoff, ~, ~] = this.Ref_reduce3_man(refl, 0.026, x(1), qc);
@@ -149,7 +190,6 @@ classdef Reflectivity < handle
             Reflparratt = this.parratt4(ED, ddlay, reflxaxis-x(1), p_buff);
             
             R = (Refl_Fresnel_qz_shift_cutoff(:,2) - Reflparratt(:,3))./Refl_Fresnel_qz_shift_cutoff(:,3);
-            
             
             
         end
@@ -191,10 +231,6 @@ classdef Reflectivity < handle
                 phase = exp(1i*qj*ddlay(j));
                 n1 = R.*phase;
                 R = (reff + n1)./(1 + reff.*n1);
-                
-                if abs(rho(j-1) - rho(1)) < 1e-7
-                    j = 0;
-                end
                 
                 qj = qjp1;
                 
