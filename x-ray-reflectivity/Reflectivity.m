@@ -6,6 +6,9 @@ classdef Reflectivity < handle
         input
         offset
         
+        lipidFit
+        proteinFit
+        
         ed
         
     end
@@ -27,8 +30,6 @@ classdef Reflectivity < handle
             this.rawdata = importdata(dataFile);
             this.calculateQc();
             
-            this.importEdProfiles(fullfile(pathname, 'ed-profiles'));
-            
         end
         
         function calculateQc(this)
@@ -39,6 +40,8 @@ classdef Reflectivity < handle
             this.input.qc = 2 * k * sqrt( 2 * delta );
             
         end
+        
+        % qz offset fitting
         
         function qzOffsetFitLipidOnly(this)
             
@@ -71,6 +74,8 @@ classdef Reflectivity < handle
         
         function qzOffsetFitLipidProtein(this)
             
+            this.importEdProfiles();
+            
             qzoff_naive = this.getNaiveQzOffset();
             qc_cutoff_ind = find(this.rawdata(:, 1) <= 0.026);
             
@@ -79,8 +84,7 @@ classdef Reflectivity < handle
             ub = [Inf, 0, 1, 100, 30, 100, 100];
             ProtFlag = 1;
             
-            [edfile, PathName,~]  = uigetfile('*.ed', 'Select the ED file you want to read.');
-            qzoff_edprofile = importdata(fullfile(PathName, edfile));
+            qzoff_edprofile = this.ed.profiles{1, 1};
             
             qzoff_fit_func = @(x, xdata) this.Qz_calc(x, xdata, qzoff_edprofile, this.input.p_buff, 3.4, this.input.qc, ProtFlag, this.rawdata);
             
@@ -100,18 +104,108 @@ classdef Reflectivity < handle
             
         end
         
+        % data fitting
+        
+        function dataFitLipid(this, sigma)
+            
+            if nargin == 1
+                sigma = 3.4;
+            end
+            
+            this.qzOffsetFitLipidOnly();
+            
+            fprintf('\n %s\n', 'The current version cuts all data below 0.026 for fitting purposes - this data is typically unreliable');
+            cutind = find(this.offset.refnorm(:,1) > 0.026, 1, 'first');
+            this.lipidFit.refnorm = this.offset.refnorm(cutind+1:end,:);
+            
+            x0 = [13, 10.4, 0.223, 0.453]; %l_tail, l_head, p_tail, p_head
+            lb = [0, 0, 0, 0];
+            ub = [100, 30, 100, 100];
+            
+            lipid2box_func = @(x,xdata) this.lipid2box(x, xdata, this.lipidFit.refnorm(:,3), this.input.p_buff, 0, sigma);
+            [x, this.lipidFit.chi2] = lsqcurvefit(lipid2box_func, x0, this.lipidFit.refnorm(:,1), this.lipidFit.refnorm(:,2)./this.lipidFit.refnorm(:,3), lb, ub);
+            
+            this.lipidFit.l_tail = x(1);
+            this.lipidFit.l_head = x(2);
+            this.lipidFit.p_tail = x(3);
+            this.lipidFit.p_head = x(4);
+            this.lipidFit.sigma = sigma;
+            
+            this.lipidFit.p_buff = this.input.p_buff;
+            
+            [this.lipidFit.ed, ddlay] = this.Lipid_Prot_EDcalc4([], [], [], x(1), x(2), x(3), x(4), this.lipidFit.p_buff, this.lipidFit.sigma, 0);
+            this.lipidFit.ref_fit = this.parratt4(this.lipidFit.ed, ddlay, this.lipidFit.refnorm(:,1), this.lipidFit.p_buff);
+            
+        end
+        
+        function dataFitProtein(this, sigma)
+            
+            if nargin == 1
+                sigma = 3.4;
+            end
+            
+            this.qzOffsetFitLipidProtein();
+            
+            fprintf('\n %s\n', 'The current version cuts all data below 0.026 for fitting purposes - this data is typically unreliable');
+            cutind = find(this.offset.refnorm(:, 1) > 0.026, 1, 'first');
+            this.proteinFit.refnorm = this.offset.refnorm(cutind+1:end, :);
+            
+            x0 = [-10, 0.35, 13, 10.4, 0.223, 0.453]; %prot_pos, cov, l_tail, l_head, p_tail, p_head
+            lb = [-100, 0, 0, 0, 0, 0];
+            ub = [0, 1, 100, 30, 100, 100];
+            
+            theta = this.ed.theta;
+            phi = this.ed.phi;
+            edProfiles = this.ed.profiles;
+            refnorm = this.proteinFit.refnorm;
+            m = length(theta);
+            n = length(phi);
+            d = length(x0);
+            x = zeros(m, n, d);
+            chi = zeros(m, n);
+            p_buff = this.input.p_buff;
+            opts = optimset('Display', 'off');
+            
+            tic;
+            parfor i = 1 : m
+                refnorm_par = refnorm;
+                for j = 1 : n
+                    prot_ed = edProfiles{i, j};
+                    prot2box_func = @(x, xdata) prot2box(x, xdata, refnorm_par(:, 3), prot_ed, p_buff, 0, sigma);
+                    [p, chi_value] = lsqcurvefit(prot2box_func, x0, refnorm_par(:,1), refnorm_par(:,2) ./ refnorm_par(:,3), lb, ub, opts);
+                    x(i, j, :) = reshape(p, 1, 1, length(p));
+                    chi(i, j) = chi_value;
+                end
+            end
+            toc;
+            
+            this.proteinFit.para = x;
+            this.proteinFit.chi = chi;
+            
+            this.proteinFit.position = x(:, :, 1);
+            this.proteinFit.coverage = x(:, :, 2);
+            this.proteinFit.tailLength = x(:, :, 3);
+            this.proteinFit.headLength = x(:, :, 4);
+            this.proteinFit.tailEd = x(:, :, 5);
+            this.proteinFit.headEd = x(:, :, 6);
+            this.proteinFit.bufferEd = p_buff;
+            this.proteinFit.sigma = sigma;
+            
+        end
+        
         % utility
         
-        function importEdProfiles(this, path)
+        function importEdProfiles(this)
             
             pattern = '^t\d\d\dp\d\d\d.ed$';
+            path = uigetdir(pwd, 'Select the folder for ED files.');
             
             try
                 contents = dir(path);
                 if isempty(contents)
                     path = uigetdir(pwd, 'Select the folder for ED files.');
+                    this.importEdProfiles();
                 end
-                contents = dir(path);
             catch
                 this.importEdProfiles();
             end
@@ -146,7 +240,7 @@ classdef Reflectivity < handle
                 this.ed.phi = phi;
                 
                 this.ed.profiles = cell(length(theta), length(phi));
-                disp('Importing all the ed files, will take a moment');
+                disp('Importing all the ed files, will take a moment...');
                 for n = 1 : length(theta)
                     for m = 1 : length(phi)
                         filename = ['t', sprintf('%03d', theta(n)), 'p', sprintf('%03d', phi(m)), '.ed'];
@@ -245,7 +339,7 @@ classdef Reflectivity < handle
                 qjp1 = sqrt(qz.^2-ones(size(qz))*rho(j-1)*qc^2);
                 reff = (qjp1 - qj)./(qjp1 + qj);
                 phase = exp(1i*qj*ddlay(j));
-                n1 = R.*phase;
+                n1 = R .* phase;
                 R = (reff + n1)./(1 + reff.*n1);
                 
                 qj = qjp1;
@@ -256,6 +350,54 @@ classdef Reflectivity < handle
             Ref(:,1) = qz;
             Ref(:,2) = double(R.*conj(R));
             Ref(:,3) = Ref(:,2)./R_fres;
+            
+        end
+        
+        function [R] = lipid2box(this, x, reflxaxis, reflerr, p_buff, sigmaflag, sigma)
+            
+            %Function for fitting lipid 2box model to qz offset reflectivity data
+            
+            if sigmaflag == 1
+                [ED, ddlay] = this.Lipid_Prot_EDcalc4([], [], [], x(2), x(3), x(4), x(5), p_buff, x(1) , 0);
+            elseif sigmaflag == 0
+                [ED, ddlay] = this.Lipid_Prot_EDcalc4([], [], [], x(1), x(2), x(3), x(4), p_buff, sigma, 0);
+            end
+            
+            Reflparratt = this.parratt4(ED, ddlay, reflxaxis, p_buff);
+            
+            R = Reflparratt(:,3)./reflerr;
+            
+        end
+        
+        function [R] = prot2box(this, x, reflxaxis, reflerr, prot_ed, p_buff, sigmaflag, sigma)
+            
+            %Function for fitting lipid 2box model to qz offset reflectivity data
+            
+            if sigmaflag == 1
+                [ED, ddlay] = this.Lipid_Prot_EDcalc4(prot_ed, x(2), x(3), x(4), x(5), x(6), x(7), p_buff, x(1) , 1);
+            elseif sigmaflag == 0
+                [ED, ddlay] = this.Lipid_Prot_EDcalc4(prot_ed, x(1), x(2), x(3), x(4), x(5), x(6), p_buff, sigma, 1);
+            end
+            
+            Reflparratt = this.parratt4(ED, ddlay, reflxaxis, p_buff);
+            
+            R = Reflparratt(:,3)./reflerr;
+            
+        end
+        
+        % plot
+        
+        function plotLipidFit(this)
+            
+            figure;
+            errorbar(this.lipidFit.refnorm(:, 1), this.lipidFit.refnorm(:, 2), this.lipidFit.refnorm(:, 3), '.', 'color', [0, 0, 0] + 0.5, 'linewidth', 1.2);
+            hold on;
+            plot(this.lipidFit.ref_fit(:, 1), this.lipidFit.ref_fit(:, 3), '-k', 'linewidth', 2.4);
+            set(gca, 'fontsize', 14);
+            hold off;
+            xlabel('$$ Q_z (\AA^{-1}) $$', 'interpreter', 'latex', 'fontsize', 16);
+            ylabel('Normalized Reflectivity', 'fontsize', 16);
+            legend('Data', 'Fit');
             
         end
         
