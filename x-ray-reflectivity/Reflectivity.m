@@ -105,11 +105,15 @@ classdef Reflectivity < handle
         function importEdProfiles(this, path)
             
             pattern = '^t\d\d\dp\d\d\d.ed$';
-            contents = dir(path);
             
-            if isempty(contents)
-                path = uigetdir(pwd, 'Select the folder for ED files.');
+            try
                 contents = dir(path);
+                if isempty(contents)
+                    path = uigetdir(pwd, 'Select the folder for ED files.');
+                end
+                contents = dir(path);
+            catch
+                this.importEdProfiles();
             end
             
             isEdFile = false(1, length(contents));
@@ -140,6 +144,18 @@ classdef Reflectivity < handle
             else
                 this.ed.theta = theta;
                 this.ed.phi = phi;
+                
+                this.ed.profiles = cell(length(theta), length(phi));
+                disp('Importing all the ed files, will take a moment');
+                for n = 1 : length(theta)
+                    for m = 1 : length(phi)
+                        filename = ['t', sprintf('%03d', theta(n)), 'p', sprintf('%03d', phi(m)), '.ed'];
+                        file = fullfile(path, filename);
+                        fid = fopen(file);
+                        this.ed.profiles{n, m} = cell2mat(textscan(fid, '%f %f %f'));
+                        fclose(fid);
+                    end
+                end
             end
             
         end
