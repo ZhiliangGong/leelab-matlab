@@ -549,6 +549,7 @@ Rfcalcfit = @(qzoff,xdata)Rfcalc3(xdata,qc,qzoff);
 %Perform fit and extract qzoff
 %f = fit(qz,refdata,ft, 'problem',qc,'StartPoint', .0004);
 %qzoff = coeffvalues(f);
+opts = optimset('Display', 'off');
 qzoff = lsqcurvefit(Rfcalcfit, 0.0004, qz, refdata, [], [], opts);
     
 %plot(f,qz,refdata)
