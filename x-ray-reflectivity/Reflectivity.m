@@ -32,15 +32,6 @@ classdef Reflectivity < handle
             
         end
         
-        function calculateQc(this)
-            
-            ro = 2.818*10^-5; % radius of electron in angstrom
-            k = 2 * pi / this.wavelength();
-            delta = 2 * pi * ro * this.input.p_buff / k^2;
-            this.input.qc = 2 * k * sqrt( 2 * delta );
-            
-        end
-        
         % qz offset fitting
         
         function qzOffsetFitLipidOnly(this)
@@ -284,7 +275,7 @@ classdef Reflectivity < handle
             
             % Define fit function
             % ft = fittype('Rfcalc3(x,qc,qzoff)','problem','qc');
-            Rfcalcfit = @(qzoff, xdata) this.calculateReflectivity(xdata, this.input.qc, qzoff);
+            Rfcalcfit = @(qzoff, xdata) calculateReflectivity(xdata, this.input.qc, qzoff);
             
             %Perform fit and extract qzoff
             %f = fit(qz,refdata,ft, 'problem',qc,'StartPoint', .0004);
@@ -304,6 +295,15 @@ classdef Reflectivity < handle
             
         end
         
+        function calculateQc(this)
+            
+            ro = 2.818*10^-5; % radius of electron in angstrom
+            k = 2 * pi / this.wavelength();
+            delta = 2 * pi * ro * this.input.p_buff / k^2;
+            this.input.qc = 2 * k * sqrt( 2 * delta );
+            
+        end
+        
         % plot
         
         function plotLipidFit(this)
@@ -318,7 +318,9 @@ classdef Reflectivity < handle
             chi = this.proteinFit.chi;
             theta = this.ed.theta;
             phi = this.ed.phi;
+            
             imagesc(theta, phi, chi' - min(chi(:)));
+            
             ylabel('\phi (deg)', 'fontsize', 16);
             xlabel('\theta (deg)', 'fontsize', 16); 
             set(gca,'YDir','normal', 'fontsize', 14);
@@ -341,15 +343,6 @@ classdef Reflectivity < handle
     end
     
     methods(Static)
-        
-        function Rf = calculateReflectivity(qz_obs, qc, qzoff)
-            
-            qz = qz_obs - qzoff;
-
-            r_fres = (qz - sqrt(qz.^2 - ones(size(qz)) * qc^2)) ./ (qz + sqrt(qz.^2 - ones(size(qz))*qc^2));
-            Rf = double(r_fres.*conj(r_fres));
-            
-        end
         
         function pmap = pmap()
             
