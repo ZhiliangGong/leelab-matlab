@@ -6,4 +6,4 @@ Collects our commonly used Matlab code.
 * If code is for your personal use, create a separate folder with your name as the folder name
 
 ## Contact
-leelab.uchicago.edu
+http://leelab.uchicago.edu
