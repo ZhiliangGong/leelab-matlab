@@ -98,14 +98,10 @@ fslice  =  0.5;     %fine slice 0.5A in x,y,z directions
 
 %rot = input('Please input the lower bound, step, and higher bound of theta and phi angles as consecutive array: \n =>');
 
-namestheta = fieldnames(rotlist);
-numtheta = length(namestheta);
-for thetacount = 1:numtheta
-    namesphi = fieldnames(rotlist.(['t', num2str(thetacount)]));
-    numphi = length(namesphi);
-    for phicount = 1:numphi
-        theta_rot = rotlist.(['t', num2str(thetacount)]).(['p', num2str(phicount)])(1);
-        phi_rot = rotlist.(['t', num2str(thetacount)]).(['p', num2str(phicount)])(2);
+
+for theta_rot = rotlist(1):rotlist(2):rotlist(3)
+    for phi_rot = rotlist(4):rotlist(5):rotlist(6)
+        
         
         %theta_rot is the theta angle relative to the normal (rotated about the x axis)
         %phi_rot is the phi rotation about the initial z axis \
@@ -116,9 +112,8 @@ for thetacount = 1:numtheta
         % [ cos(phi) -sin(phi) 0 ]
         % [ sin(phi)  cos(phi) 0 ]
         % [ 0         0        1 ]
-       
-        phi = phi_rot*pi/180;
-        theta = theta_rot*pi/180;
+       theta = theta_rot*pi/180;
+       phi = phi_rot*pi/180;
         
         % The theta rotation matrix about the x axis following right hand rule is applied next using the matrix:
         % [ 1     0           0      ]
@@ -269,6 +264,7 @@ for thetacount = 1:numtheta
         ED_prof = flipud(ED_prof);
         
         R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xyarea = abs(xtop-xbot)*abs(ytop-ybot);
+        R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).minarea = minarea;
         R.etotpdb = etotpdb;
         display(etotpdb);
         R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).etot = earray;
