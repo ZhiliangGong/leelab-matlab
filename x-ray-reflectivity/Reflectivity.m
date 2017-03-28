@@ -9,6 +9,8 @@ classdef Reflectivity < handle
         lipidFit
         proteinFit
         
+        comment
+        
         ed
         
     end
@@ -134,8 +136,6 @@ classdef Reflectivity < handle
             if nargin == 1
                 sigma = 3.4;
             end
-            
-            this.qzOffsetFitLipidProtein();
             
             fprintf('\n %s\n', 'The current version cuts all data below 0.026 for fitting purposes - this data is typically unreliable');
             cutind = find(this.offset.refnorm(:, 1) > 0.026, 1, 'first');
