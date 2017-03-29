@@ -89,18 +89,32 @@ classdef PDB < handle
                     y_diff = repmat(y_grid_pos, length(y), 1) - repmat(y', 1, length(y_grid_pos));
                     z_diff = repmat(z_grid_pos, length(z), 1) - repmat(z', 1, length(z_grid_pos));
                     
-                    [~, x_top_indices] = ind2sub([length(x), length(x_grid_pos)], find(x_diff > this.data.radius' & x_diff < this.data.radius' + xfslice));
-                    [~, x_bot_indices] = ind2sub([length(x), length(x_grid_pos)], find(x_diff < -this.data.radius' & x_diff > -this.data.radius' - xfslice));
-                    [~, y_top_indices] = ind2sub([length(y), length(y_grid_pos)], find(y_diff > this.data.radius' & y_diff < this.data.radius' + yfslice));
-                    [~, y_bot_indices] = ind2sub([length(y), length(y_grid_pos)], find(y_diff < -this.data.radius' & y_diff > -this.data.radius' - yfslice));
-                    [~, z_top_indices] = ind2sub([length(z), length(z_grid_pos)], find(z_diff > this.data.radius' & z_diff < this.data.radius' + zfslice));
-                    [~, z_bot_indices] = ind2sub([length(z), length(z_grid_pos)], find(z_diff < -this.data.radius' & z_diff > -this.data.radius' - zfslice));
+                    [x_top_atom_indices(:,1), x_top_atom_indices(:,2)] = ind2sub([length(x), length(x_grid_pos)], find(x_diff > this.data.radius' & x_diff < this.data.radius' + xfslice));
+                    [x_bot_atom_indices(:,1), x_bot_atom_indices(:,2)] = ind2sub([length(x), length(x_grid_pos)], find(x_diff < -this.data.radius' & x_diff > -this.data.radius' - xfslice));
+                    [y_top_atom_indices(:,1), y_top_atom_indices(:,2)] = ind2sub([length(y), length(y_grid_pos)], find(y_diff > this.data.radius' & y_diff < this.data.radius' + yfslice));
+                    [y_bot_atom_indices(:,1), y_bot_atom_indices(:,2)] = ind2sub([length(y), length(y_grid_pos)], find(y_diff < -this.data.radius' & y_diff > -this.data.radius' - yfslice));
+                    [z_top_atom_indices(:,1), z_top_atom_indices(:,2)] = ind2sub([length(z), length(z_grid_pos)], find(z_diff > this.data.radius' & z_diff < this.data.radius' + zfslice));
+                    [z_bot_atom_indices(:,1), z_bot_atom_indices(:,2)] = ind2sub([length(z), length(z_grid_pos)], find(z_diff < -this.data.radius' & z_diff > -this.data.radius' - zfslice));
+                    
+                    x_top_atom_indices = sortrows(x_top_atom_indices);
+                    x_bot_atom_indices = sortrows(x_bot_atom_indices);
+                    y_top_atom_indices = sortrows(y_top_atom_indices);
+                    y_bot_atom_indices = sortrows(y_bot_atom_indices);
+                    z_top_atom_indices = sortrows(z_top_atom_indices);
+                    z_bot_atom_indices = sortrows(z_bot_atom_indices);
+                    
+                    x_top_indices = x_top_atom_indices(:,2);
+                    x_bot_indices = x_bot_atom_indices(:,2);
+                    y_top_indices = y_top_atom_indices(:,2);
+                    y_bot_indices = y_bot_atom_indices(:,2);
+                    z_top_indices = z_top_atom_indices(:,2);
+                    z_bot_indices = z_bot_atom_indices(:,2);
                     
                     [xf_grid, yf_grid, zf_grid] = meshgrid(x_grid_pos, y_grid_pos, z_grid_pos);
                     
-%                     xf_grid = permute(xf_grid, [2,1,3]);
-%                     yf_grid = permute(yf_grid, [2,1,3]);
-%                     zf_grid = permute(zf_grid, [2,1,3]);
+                    xf_grid = permute(xf_grid, [2,1,3]);
+                    yf_grid = permute(yf_grid, [2,1,3]);
+                    zf_grid = permute(zf_grid, [2,1,3]);
                     
                     tic
                     for k = 1:length(this.data.atoms)
