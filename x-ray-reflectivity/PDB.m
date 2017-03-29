@@ -98,25 +98,25 @@ classdef PDB < handle
                     
                     [xf_grid, yf_grid, zf_grid] = meshgrid(x_grid_pos, y_grid_pos, z_grid_pos);
                     
-                    xf_grid = permute(xf_grid, [2,1,3]);
-                    yf_grid = permute(yf_grid, [2,1,3]);
-                    zf_grid = permute(zf_grid, [2,1,3]);
+%                     xf_grid = permute(xf_grid, [2,1,3]);
+%                     yf_grid = permute(yf_grid, [2,1,3]);
+%                     zf_grid = permute(zf_grid, [2,1,3]);
                     
                     tic
-                    for atomcount = 1:length(this.data.atoms)
+                    for k = 1:length(this.data.atoms)
                         
-                        Elec_frac = zeros(x_top_indices(atomcount)-x_bot_indices(atomcount)+1, y_top_indices(atomcount)-y_bot_indices(atomcount)+1, z_top_indices(atomcount)-z_bot_indices(atomcount)+1);
+                        Elec_frac = zeros(x_top_indices(k)-x_bot_indices(k)+1, y_top_indices(k)-y_bot_indices(k)+1, z_top_indices(k)-z_bot_indices(k)+1);
                         
-                        atomdist = (xf_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) - x(atomcount)).^2 ...
-                            + (yf_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) - y(atomcount)).^2 ...
-                            + (zf_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) - z(atomcount)).^2;
+                        atomdist = (xf_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) - x(k)).^2 ...
+                            + (yf_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) - y(k)).^2 ...
+                            + (zf_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) - z(k)).^2;
                         
-                        ind_list = (atomdist <= this.data.radius(atomcount)^2);
+                        ind_list = (atomdist <= this.data.radius(k)^2);
                         
-                        Elec_frac(ind_list) = (this.data.electron(atomcount)*fvol)/((4/3)*pi*this.data.radius(atomcount)^3);
+                        Elec_frac(ind_list) = (this.data.electron(k)*fvol)/((4/3)*pi*this.data.radius(k)^3);
                         
-                        Elec_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount))...
-                            = Elec_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) + Elec_frac;
+                        Elec_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k))...
+                            = Elec_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) + Elec_frac;
                         
                     end
                     
