@@ -25,13 +25,152 @@ classdef PDB < handle
             n = length(this.data.x);
             this.data.mass = zeros(1, n);
             this.data.electron = zeros(1, n);
+            this.data.radius = zeros(1, n);
             [massTable, electronTable] = this.getPeriodicTable();
+            radiusTable = this.getAtomRadiusTable();
             for i = 1 : n
                 this.data.mass(i) = massTable(this.data.atoms(i));
                 this.data.electron(i) = electronTable(this.data.atoms(i));
+                this.data.radius(i) = radiusTable(this.data.atoms(i));
             end
             
         end
+        
+        function generateEdProfiles(this, theta, phi)
+            
+            if nargin == 1
+                theta = 0 : 5 : 180;
+                phi = 0 : 10 : 350;
+            end
+            
+            gridSize = 0.5;
+            this.ed.gridSize = gridSize;
+            this.ed.theta = theta;
+            this.ed.phi = phi;
+            
+            m = length(theta);
+            n = length(phi);
+            this.ed.profiles = cell(m, n);
+            
+            for i = 1 : m
+                for j = 1 : n
+                    
+                    positions = [1, 0, 0; 0, cos(theta(i)), -sin(theta(i)); 0, sin(theta(i)), cos(theta(i))]...
+                        * [cos(phi(j)), -sin(phi(j)), 0; sin(phi(j)), cos(phi(j)), 0; 0, 0, 1]...
+                        * [this.data.x; this.data.y; this.data.z];
+                    x = positions(1,:);
+                    y = positions(2,:);
+                    z = positions(3,:);
+                    
+                    xtop = max(x + this.data.radius) + gridSize;
+                    xbot = min(x - this.data.radius) - gridSize;
+                    ytop = max(y + this.data.radius) + gridSize;
+                    ybot = min(y - this.data.radius) - gridSize;
+                    ztop = max(z + this.data.radius) + gridSize;
+                    zbot = min(z - this.data.radius) - gridSize;
+                    
+                    
+                    xfgridnum = round((xtop - xbot) / gridSize);
+                    yfgridnum = round((ytop - ybot) / gridSize);
+                    zfgridnum = round((ztop - zbot) / gridSize);
+                    
+                    xfslice = (xtop - xbot) / xfgridnum;
+                    yfslice = (ytop - ybot) / yfgridnum;
+                    zfslice = (ztop - zbot) / zfgridnum;
+                    fvol = xfslice * yfslice * zfslice;
+                    
+                    Elec_grid = zeros(xfgridnum, yfgridnum, zfgridnum);
+                    
+                    x_grid_pos = xbot + xfslice * ((1:xfgridnum) - 0.5);
+                    y_grid_pos = ybot + yfslice * ((1:yfgridnum) - 0.5);
+                    z_grid_pos = zbot + zfslice * ((1:zfgridnum) - 0.5);
+                    
+                    x_diff = repmat(x_grid_pos, length(x), 1) - repmat(x', 1, length(x_grid_pos));
+                    y_diff = repmat(y_grid_pos, length(y), 1) - repmat(y', 1, length(y_grid_pos));
+                    z_diff = repmat(z_grid_pos, length(z), 1) - repmat(z', 1, length(z_grid_pos));
+                    
+                    [~, x_top_indices] = ind2sub([length(x), length(x_grid_pos)], find(x_diff > this.data.radius' & x_diff < this.data.radius' + xfslice));
+                    [~, x_bot_indices] = ind2sub([length(x), length(x_grid_pos)], find(x_diff < -this.data.radius' & x_diff > -this.data.radius' - xfslice));
+                    [~, y_top_indices] = ind2sub([length(y), length(y_grid_pos)], find(y_diff > this.data.radius' & y_diff < this.data.radius' + yfslice));
+                    [~, y_bot_indices] = ind2sub([length(y), length(y_grid_pos)], find(y_diff < -this.data.radius' & y_diff > -this.data.radius' - yfslice));
+                    [~, z_top_indices] = ind2sub([length(z), length(z_grid_pos)], find(z_diff > this.data.radius' & z_diff < this.data.radius' + zfslice));
+                    [~, z_bot_indices] = ind2sub([length(z), length(z_grid_pos)], find(z_diff < -this.data.radius' & z_diff > -this.data.radius' - zfslice));
+                    
+                    [xf_grid, yf_grid, zf_grid] = meshgrid(x_grid_pos, y_grid_pos, z_grid_pos);
+                    
+                    xf_grid = permute(xf_grid, [2,1,3]);
+                    yf_grid = permute(yf_grid, [2,1,3]);
+                    zf_grid = permute(zf_grid, [2,1,3]);
+                    
+                    tic
+                    for atomcount = 1:length(this.data.atoms)
+                        
+                        Elec_frac = zeros(x_top_indices(atomcount)-x_bot_indices(atomcount)+1, y_top_indices(atomcount)-y_bot_indices(atomcount)+1, z_top_indices(atomcount)-z_bot_indices(atomcount)+1);
+                        
+                        atomdist = (xf_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) - x(atomcount)).^2 ...
+                            + (yf_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) - y(atomcount)).^2 ...
+                            + (zf_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) - z(atomcount)).^2;
+                        
+                        ind_list = (atomdist <= this.data.radius(atomcount)^2);
+                        
+                        Elec_frac(ind_list) = (this.data.electron(atomcount)*fvol)/((4/3)*pi*this.data.radius(atomcount)^3);
+                        
+                        Elec_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount))...
+                            = Elec_grid(x_bot_indices(atomcount):x_top_indices(atomcount),y_bot_indices(atomcount):y_top_indices(atomcount), z_bot_indices(atomcount):z_top_indices(atomcount)) + Elec_frac;
+                        
+                    end
+                    
+                    toc
+                    
+                    ED_prof = zeros(zfgridnum,3);
+                    parray = zeros(zfgridnum,1);
+                    barray = zeros(zfgridnum,1);
+                    earray = zeros(zfgridnum,1);
+                    tote = 0;
+                    
+                    numgridarea = any(Elec_grid,3);
+                    minareagrid = sum(numgridarea(:));
+                    
+                    for lay = 1:zfgridnum
+                        
+                        ED_prof(lay,1) = zf_grid(1,1,lay);
+                        ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*xfgridnum*yfgridnum);
+                        ED_prof(lay,3) = sum(sum(Elec_grid(:,:,lay)))/(fvol*minareagrid);
+                        ED_prof(lay,4) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*xfgridnum*yfgridnum);
+                        ED_prof(lay,5) = (minareagrid-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*minareagrid);
+                        
+                        parray(lay) = nnz(Elec_grid(:,:,lay))*fvol;
+                        barray(lay) = (minareagrid-nnz(Elec_grid(:,:,lay)))*fvol;
+                        earray(lay) = sum(sum(Elec_grid(:,:,lay)));
+                        tote = tote + earray(lay);
+                    end
+                    
+                    ED_profout.(sprintf('t%03dp%03d',theta_rot,phi_rot)) = flipud(ED_prof);
+                    R.etotpdb = etotpdb;
+                    display(etotpdb);
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xyarea = abs(xtop-xbot)*abs(ytop-ybot);
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).minarea = minareagrid*xfslice*yfslice;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).etot = earray;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).tote = tote;
+                    display(sum(tote));
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).elecdif = (tote - etotpdb);
+                    display(sum(tote) - etotpdb);
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).provol = parray;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).bufvol = barray;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xfgridnum = xfgridnum;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).yfgridnum = yfgridnum;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).zfgridnum = zfgridnum;
+                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).fvol = fvol;
+                    
+                end
+            end
+            
+            
+            
+            
+        end
+        
+        % utility
         
         function total = totalElectron(this)
             
@@ -49,7 +188,7 @@ classdef PDB < handle
     
     methods(Static)
         
-        function [AtomicMassTable, ElectronTable, RadiusTable] = getPeriodicTable()
+        function [AtomicMassTable, ElectronTable] = getPeriodicTable()
 
             symbols = 'H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U';
             atomicNumber = (1:92);
@@ -66,18 +205,17 @@ classdef PDB < handle
 
         end
         
-%         function radius = getAtomRadiusTable()
-%             
-%             radius = containers.Map;
-%             radius('C') = 1.7;
-%             radius('N') = 1.55;
-%             radius('H') = 1.1;
-%             radius('O') = 1.52;
-%             radius('S') = 1.8;
-%             radius('P') = 1.95;
-%             radius('
-%             
-%         end
+        function radius = getAtomRadiusTable()
+            
+            radius = containers.Map;
+            radius('C') = 1.7;
+            radius('N') = 1.55;
+            radius('H') = 1.1;
+            radius('O') = 1.52;
+            radius('S') = 1.8;
+            radius('P') = 1.95;
+            
+        end
         
     end
     
