@@ -1,4 +1,4 @@
-function [ED_prof, R] = prot_edpro_func2(pdbfile, rotlist, pdbflag, chainflag) %, currentFolder, pathname, pdbflag)
+function [ED_profout, R] = prot_edpro_func2(pdbfile, rotlist, currentFolder, pathname, pdbflag, chainflag) %, currentFolder, pathname, pdbflag)
 %This program is for calculating electron density
 %of protein inside a smallest box with air or with buffer
 %by using grid method
@@ -22,7 +22,7 @@ fslice  =  0.5;     %fine slice 0.5A in x,y,z directions
         raw = textscan(fid,'%s %d %s %*s %*d %f %f %f %*f %*f %*s', 'HeaderLines', 1);
     end
     fclose(fid);
-    %cd(currentFolder)
+    cd(currentFolder)
     
     %Extract data from raw structure
     vn = raw{1}; %Grab Atom or Anisou label
@@ -98,10 +98,14 @@ fslice  =  0.5;     %fine slice 0.5A in x,y,z directions
 
 %rot = input('Please input the lower bound, step, and higher bound of theta and phi angles as consecutive array: \n =>');
 
-
-for theta_rot = rotlist(1):rotlist(2):rotlist(3)
-    for phi_rot = rotlist(4):rotlist(5):rotlist(6)
-        
+namestheta = fieldnames(rotlist);
+numtheta = length(namestheta);
+for thetacount = 1:numtheta
+    namesphi = fieldnames(rotlist.(['t', num2str(thetacount)]));
+    numphi = length(namesphi);
+    for phicount = 1:numphi
+        theta_rot = rotlist.(['t', num2str(thetacount)]).(['p', num2str(phicount)])(1);
+        phi_rot = rotlist.(['t', num2str(thetacount)]).(['p', num2str(phicount)])(2);
         
         %theta_rot is the theta angle relative to the normal (rotated about the x axis)
         %phi_rot is the phi rotation about the initial z axis \
@@ -112,18 +116,24 @@ for theta_rot = rotlist(1):rotlist(2):rotlist(3)
         % [ cos(phi) -sin(phi) 0 ]
         % [ sin(phi)  cos(phi) 0 ]
         % [ 0         0        1 ]
-       theta = theta_rot*pi/180;
-       phi = phi_rot*pi/180;
+       
+        phi = phi_rot*pi/180;
+        theta = theta_rot*pi/180;
         
         % The theta rotation matrix about the x axis following right hand rule is applied next using the matrix:
         % [ 1     0           0      ]
         % [ 0 cos(theta) -sin(theta) ]
-        % [ 0 sin(theta)  costheta)  ]
+        % [ 0 sin(theta)  cos(theta)  ]
         % 
         
-        x = adata.x*cos(phi) - adata.y*sin(phi);
-        y = adata.x*cos(theta)*sin(phi) + adata.y*cos(theta)*cos(phi) - adata.z*sin(theta);
-        z = adata.x*sin(theta)*sin(phi) + adata.y*sin(theta)*cos(phi) + adata.z*cos(theta);
+%         x = adata.x*cos(phi) - adata.y*sin(phi);
+%         y = adata.x*cos(theta)*sin(phi) + adata.y*cos(theta)*cos(phi) - adata.z*sin(theta);
+%         z = adata.x*sin(theta)*sin(phi) + adata.y*sin(theta)*cos(phi) + adata.z*cos(theta);
+        
+        atompos = [1, 0, 0; 0, cos(theta), -sin(theta); 0, sin(theta), cos(theta)]*[cos(phi), -sin(phi), 0; sin(phi), cos(phi), 0; 0, 0, 1]*[adata.x; adata.y; adata.z];
+        x = atompos(1,:);
+        y = atompos(2,:);
+        z = atompos(3,:);
         
         if pdbflag == 1
             outf = sprintf('t%03dp%03d.pdb',theta_rot,phi_rot);
@@ -132,7 +142,7 @@ for theta_rot = rotlist(1):rotlist(2):rotlist(3)
                 sprintf('Cannot create data file: %s',outf)
             end
         
-            %cd(pathname)
+            cd(pathname)
             red = fopen(pdbfile,'r');
             if red  == -1
                 sprintf('ERROR: cannot create data file: %s',outf)
@@ -155,7 +165,7 @@ for theta_rot = rotlist(1):rotlist(2):rotlist(3)
                 line = fgets(red, 100);
             end
             fclose(red);
-            %cd(currentFolder)
+            cd(currentFolder)
             fclose(wrf2);
         end
         
@@ -168,7 +178,7 @@ for theta_rot = rotlist(1):rotlist(2):rotlist(3)
         ybot = min(y-adata.radius);
         ztop = max(z+adata.radius);
         zbot = min(z-adata.radius);
-        sprintf('xy area of the box = %f\n ',abs(xtop-xbot)*abs(ytop-ybot))
+        sprintf('xy area of the box = %f',abs(xtop-xbot)*abs(ytop-ybot))
         
         %Grid array, elements will be # of electrons in each grid. Each
         %grid will be indexed by the coordinate of its center.
@@ -225,7 +235,7 @@ for theta_rot = rotlist(1):rotlist(2):rotlist(3)
 %             corner(:,:,:,7) = ((x_grid-xslice) - adata.x(atomcount)).^2 + (y_grid - adata.y(atomcount)).^2 +(z_grid - adata.z(atomcount)).^2;
 %             corner(:,:,:,8) = (x_grid - adata.x(atomcount)).^2 + (y_grid - adata.y(atomcount)).^2 +(z_grid - adata.z(atomcount)).^2;
             
-            atomdist = (xf_grid - adata.x(atomcount)).^2 + (yf_grid - adata.y(atomcount)).^2 + (zf_grid - adata.z(atomcount)).^2;
+            atomdist = (xf_grid - x(atomcount)).^2 + (yf_grid - y(atomcount)).^2 + (zf_grid - z(atomcount)).^2;
             %Find the grids with at least one corner contained within the
             %atom's van der waal's sphere
             
@@ -246,27 +256,28 @@ for theta_rot = rotlist(1):rotlist(2):rotlist(3)
         tote = 0;
         
         numgridarea = any(Elec_grid,3);
-        minarea = sum(numgridarea(:));
+        minareagrid = sum(numgridarea(:));
         
         for lay = 1:zfgridnum
                 
             ED_prof(lay,1) = zf_grid(1,1,lay);
-            %ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*xfgridnum*yfgridnum);
-            ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*minarea);
-            ED_prof(lay,3) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*xfgridnum*yfgridnum);
+            ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*xfgridnum*yfgridnum);
+            ED_prof(lay,3) = sum(sum(Elec_grid(:,:,lay)))/(fvol*minareagrid);
+            ED_prof(lay,4) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*xfgridnum*yfgridnum);
+            ED_prof(lay,5) = (minareagrid-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*minareagrid);
 
             parray(lay) = nnz(Elec_grid(:,:,lay))*fvol;
-            barray(lay) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol;
+            %barray(lay) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol;
+            barray(lay) = (minareagrid-nnz(Elec_grid(:,:,lay)))*fvol;
             earray(lay) = sum(sum(Elec_grid(:,:,lay)));
             tote = tote + earray(lay);
         end
         
-        ED_prof = flipud(ED_prof);
-        
-        R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xyarea = abs(xtop-xbot)*abs(ytop-ybot);
-        R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).minarea = minarea;
+        ED_profout.(sprintf('t%03dp%03d',theta_rot,phi_rot)) = flipud(ED_prof);
         R.etotpdb = etotpdb;
         display(etotpdb);
+        R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xyarea = abs(xtop-xbot)*abs(ytop-ybot);
+        R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).minarea = minareagrid*xfslice*yfslice;
         R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).etot = earray;
         R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).tote = tote;
         display(sum(tote));
