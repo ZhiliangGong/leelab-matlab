@@ -101,7 +101,7 @@ function [ED_prof] = prot_edpro_func2_fit(adata, theta, phi) %, currentFolder, p
     %             corner(:,:,:,7) = ((x_grid-xslice) - adata.x(atomcount)).^2 + (y_grid - adata.y(atomcount)).^2 +(z_grid - adata.z(atomcount)).^2;
     %             corner(:,:,:,8) = (x_grid - adata.x(atomcount)).^2 + (y_grid - adata.y(atomcount)).^2 +(z_grid - adata.z(atomcount)).^2;
 
-        atomdist = (xf_grid - adata.x(atomcount)).^2 + (yf_grid - adata.y(atomcount)).^2 + (zf_grid - adata.z(atomcount)).^2;
+        atomdist = (xf_grid - x(atomcount)).^2 + (yf_grid - y(atomcount)).^2 + (zf_grid - z(atomcount)).^2;
         %Find the grids with at least one corner contained within the
         %atom's van der waal's sphere
 
@@ -120,15 +120,21 @@ function [ED_prof] = prot_edpro_func2_fit(adata, theta, phi) %, currentFolder, p
     barray = zeros(zfgridnum,1);
     earray = zeros(zfgridnum,1);
     tote = 0;
+    
+    numgridarea = any(Elec_grid,3);
+    minarea = sum(numgridarea(:));
 
     for lay = 1:zfgridnum
 
         ED_prof(lay,1) = zf_grid(1,1,lay);
-        ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*xfgridnum*yfgridnum);
-        ED_prof(lay,3) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*xfgridnum*yfgridnum);
+        %ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*xfgridnum*yfgridnum);
+        ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*minarea);
+        %ED_prof(lay,3) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*xfgridnum*yfgridnum);
+        ED_prof(lay,3) = (minarea-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*minarea);
 
         parray(lay) = nnz(Elec_grid(:,:,lay))*fvol;
-        barray(lay) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol;
+        %barray(lay) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol;
+        barray(lay) = (minarea-nnz(Elec_grid(:,:,lay)))*fvol;
         earray(lay) = sum(sum(Elec_grid(:,:,lay)));
         tote = tote + earray(lay);
     end
