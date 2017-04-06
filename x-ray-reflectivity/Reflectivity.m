@@ -14,6 +14,9 @@ classdef Reflectivity < handle
         pdb
         ed
         
+        lgboxEd
+        lgboxProteinFit
+        
     end
     
     methods
@@ -68,8 +71,6 @@ classdef Reflectivity < handle
         
         function qzOffsetFitLipidProtein(this)
             
-            this.importEdProfiles();
-            
             qzoff_naive = this.getNaiveQzOffset();
             qc_cutoff_ind = find(this.rawdata(:, 1) <= 0.026);
             
@@ -78,7 +79,7 @@ classdef Reflectivity < handle
             ub = [Inf, 0, 1, 100, 30, 100, 100];
             ProtFlag = 1;
             
-            qzoff_edprofile = this.ed.profiles{1, 1};
+            qzoff_edprofile = this.ed.generateSingleEdProfile();
             
             qzoff_fit_func = @(x, xdata) Qz_calc(x, xdata, qzoff_edprofile, this.input.p_buff, 3.4, this.input.qc, ProtFlag, this.rawdata);
             
@@ -146,9 +147,9 @@ classdef Reflectivity < handle
             lb = [-100, 0, 0, 0, 0, 0];
             ub = [0, 1, 100, 30, 100, 100];
             
-            theta = this.ed.theta;
-            phi = this.ed.phi;
-            edProfiles = this.ed.profiles;
+            theta = this.ed.ed.theta;
+            phi = this.ed.ed.phi;
+            edProfiles = this.ed.ed.profiles;
             refnorm = this.proteinFit.refnorm;
             m = length(theta);
             n = length(phi);
@@ -203,22 +204,97 @@ classdef Reflectivity < handle
             
         end
         
+        function dataFitProteinLargeBoxEd(this, sigma)
+            
+            if nargin == 1
+                sigma = 3.4;
+            end
+            
+            fprintf('\n %s\n', 'The current version cuts all data below 0.026 for fitting purposes - this data is typically unreliable');
+            cutind = find(this.offset.refnorm(:, 1) > 0.026, 1, 'first');
+            this.lgboxProteinFit.refnorm = this.offset.refnorm(cutind+1:end, :);
+            
+            x0 = [-10, 0.35, 13, 10.4, 0.223, 0.453]; %prot_pos, cov, l_tail, l_head, p_tail, p_head
+            lb = [-100, 0, 0, 0, 0, 0];
+            ub = [0, 1, 100, 30, 100, 100];
+            
+            theta = this.lgboxEd.theta;
+            phi = this.lgboxEd.phi;
+            edProfiles = this.lgboxEd.profiles;
+            refnorm = this.lgboxProteinFit.refnorm;
+            m = length(theta);
+            n = length(phi);
+            d = length(x0);
+            x = zeros(m, n, d);
+            chi = zeros(m, n);
+            p_buff = this.input.p_buff;
+            opts = optimset('Display', 'off');
+            
+            tic;
+            parfor i = 1 : m
+                refnorm_par = refnorm;
+                for j = 1 : n
+                    prot_ed = edProfiles{i, j};
+                    prot2box_func = @(x, xdata) prot2box(x, xdata, refnorm_par(:, 3), prot_ed, p_buff, 0, sigma);
+                    [p, chi_value] = lsqcurvefit(prot2box_func, x0, refnorm_par(:,1), refnorm_par(:,2) ./ refnorm_par(:,3), lb, ub, opts);
+                    x(i, j, :) = reshape(p, 1, 1, length(p));
+                    chi(i, j) = chi_value;
+                end
+            end
+            toc;
+            
+            this.lgboxProteinFit.para = x;
+            this.lgboxProteinFit.chi = chi;
+            
+            this.lgboxProteinFit.position = x(:, :, 1);
+            this.lgboxProteinFit.coverage = x(:, :, 2);
+            this.lgboxProteinFit.tailLength = x(:, :, 3);
+            this.lgboxProteinFit.headLength = x(:, :, 4);
+            this.lgboxProteinFit.tailEd = x(:, :, 5);
+            this.lgboxProteinFit.headEd = x(:, :, 6);
+            this.lgboxProteinFit.bufferEd = p_buff;
+            this.lgboxProteinFit.sigma = sigma;
+            
+            ed_par = cell(m, n);
+            ref_par = cell(m, n);
+            
+            tic;
+            parfor i = 1 : m
+                para_par = x(i, :, :);
+                refnorm_par = refnorm;
+                for j = 1 : n
+                    prot_ed = edProfiles{i, j};
+                    [ed_par{i, j}, ddlay] = Lipid_Prot_EDcalc4(prot_ed, para_par(1, j, 1), para_par(1, j, 2), para_par(1, j, 3), para_par(1 ,j, 4), para_par(1, j, 5), para_par(1, j, 6), p_buff, sigma, 1);
+                    ref_par{i, j} = parratt4(ed_par{i ,j}, ddlay, refnorm_par(:, 1), p_buff);
+                end
+            end
+            toc;
+            
+            this.lgboxProteinFit.ed = ed_par;
+            this.lgboxProteinFit.ref_fit = ref_par;
+            
+        end
+        
         % utility
         
-        function importEdProfiles(this)
+        function importEdProfiles(this, path)
             
-            pattern = '^t\d\d\dp\d\d\d.ed$';
-            path = uigetdir(pwd, 'Select the folder for ED files.');
-            
-            try
-                contents = dir(path);
-                if isempty(contents)
-                    path = uigetdir(pwd, 'Select the folder for ED files.');
+            if nargin == 1
+                path = uigetdir(pwd, 'Select the folder for ED files.');
+                try
+                    contents = dir(path);
+                    if isempty(contents)
+                        path = uigetdir(pwd, 'Select the folder for ED files.');
+                        this.importEdProfiles();
+                    end
+                catch
                     this.importEdProfiles();
                 end
-            catch
-                this.importEdProfiles();
+            else
+                contents = dir(path);
             end
+            
+            pattern = '^t\d\d\dp\d\d\d.ed$';
             
             isEdFile = false(1, length(contents));
             allFiles = cell(1, length(contents));
@@ -229,12 +305,12 @@ classdef Reflectivity < handle
                 end
             end
             
-            this.ed.path = path;
-            this.ed.files = allFiles(isEdFile);
+            this.lgboxEd.path = path;
+            this.lgboxEd.files = allFiles(isEdFile);
             
-            names = repmat('0', length(this.ed.files), length(this.ed.files{1}));
-            for n = 1 : length(this.ed.files)
-                names(n, :) = this.ed.files{n};
+            names = repmat('0', length(this.lgboxEd.files), length(this.lgboxEd.files{1}));
+            for n = 1 : length(this.lgboxEd.files)
+                names(n, :) = this.lgboxEd.files{n};
             end
             
             theta = sort(str2num(names(:, 2 : 4)));
@@ -243,20 +319,20 @@ classdef Reflectivity < handle
             theta = theta(theta ~= [theta(end); theta(1 : end -1)]);
             phi = phi(phi ~= [phi(end); phi(1 : end -1)]);
             
-            if length(theta) * length(phi) ~= length(this.ed.files)
+            if length(theta) * length(phi) ~= length(this.lgboxEd.files)
                 error('Some ed files are missing, or their names are incorrect');
             else
-                this.ed.theta = theta;
-                this.ed.phi = phi;
+                this.lgboxEd.theta = theta;
+                this.lgboxEd.phi = phi;
                 
-                this.ed.profiles = cell(length(theta), length(phi));
+                this.lgboxEd.profiles = cell(length(theta), length(phi));
                 disp('Importing all the ed files, will take a moment...');
                 for n = 1 : length(theta)
                     for m = 1 : length(phi)
                         filename = ['t', sprintf('%03d', theta(n)), 'p', sprintf('%03d', phi(m)), '.ed'];
                         file = fullfile(path, filename);
                         fid = fopen(file);
-                        this.ed.profiles{n, m} = cell2mat(textscan(fid, '%f %f %f'));
+                        this.lgboxEd.profiles{n, m} = cell2mat(textscan(fid, '%f %f %f'));
                         fclose(fid);
                     end
                 end
@@ -305,6 +381,25 @@ classdef Reflectivity < handle
             
         end
         
+        function o = bestFitParameters(this)
+            
+            [I, J] = find(this.proteinFit.chi == min(this.proteinFit.chi(:)), 1);
+            
+            o.thetaIndex = I;
+            o.phiIndex = J;
+            o.theta = this.ed.ed.theta(I);
+            o.phi = this.ed.ed.phi(J);
+            o.coverage = this.proteinFit.coverage(I, J);
+            o.position = this.proteinFit.position(I, J);
+            o.tailLength = this.proteinFit.tailLength(I, J);
+            o.headLength = this.proteinFit.headLength(I, J);
+            o.tailEd = this.proteinFit.tailEd(I, J);
+            o.headEd = this.proteinFit.headEd(I, J);
+            o.data = this.proteinFit.refnorm;
+            o.fit = this.proteinFit.ref_fit;
+            
+        end
+        
         % plot
         
         function plotLipidFit(this)
@@ -317,8 +412,8 @@ classdef Reflectivity < handle
             
             figure;
             chi = this.proteinFit.chi;
-            theta = this.ed.theta;
-            phi = this.ed.phi;
+            theta = this.ed.ed.theta;
+            phi = this.ed.ed.phi;
             
             imagesc(theta, phi, chi' - min(chi(:)));
             
@@ -335,9 +430,8 @@ classdef Reflectivity < handle
         
         function plotProteinFit(this)
             
-            index = find(this.proteinFit.chi == min(this.proteinFit.chi(:)), 1);
-            [m, n] = ind2sub(size(this.ed.profiles), index);
-            this.plotDataAndFit(this.proteinFit.refnorm, this.proteinFit.ref_fit{m, n});
+            o = this.bestFitParameters();
+            this.plotDataAndFit(this.proteinFit.refnorm, this.proteinFit.ref_fit{o.thetaIndex, o.phiIndex});
             
         end
         

@@ -50,115 +50,183 @@ classdef ProteinEd < handle
             
             m = length(theta);
             n = length(phi);
+            this.ed.area = zeros(m, n);
             this.ed.profiles = cell(m, n);
+            N = length(this.data.x);
             
+            tic;
             for i = 1 : m
                 for j = 1 : n
                     
                     positions = [1, 0, 0; 0, cos(theta(i)), -sin(theta(i)); 0, sin(theta(i)), cos(theta(i))]...
                         * [cos(phi(j)), -sin(phi(j)), 0; sin(phi(j)), cos(phi(j)), 0; 0, 0, 1]...
                         * [this.data.x; this.data.y; this.data.z];
-                    x = positions(1,:);
-                    y = positions(2,:);
-                    z = positions(3,:);
                     
-                    xtop = max(x + this.data.radius);
-                    xbot = min(x - this.data.radius);
-                    ytop = max(y + this.data.radius);
-                    ybot = min(y - this.data.radius);
-                    ztop = max(z + this.data.radius);
-                    zbot = min(z - this.data.radius);
+                    x = positions(1, :);
+                    y = positions(2, :);
+                    z = positions(3, :);
+                    
+                    xtop = max(x + this.data.radius) + 1e-10;
+                    xbot = min(x - this.data.radius) - 1e-10;
+                    ytop = max(y + this.data.radius) + 1e-10;
+                    ybot = min(y - this.data.radius) - 1e-10;
+                    ztop = max(z + this.data.radius) + 1e-10;
+                    zbot = min(z - this.data.radius) - 1e-10;
                     
                     xn = ceil((xtop - xbot) / gridSize);
                     yn = ceil((ytop - ybot) / gridSize);
                     zn = ceil((ztop - zbot) / gridSize);
                     
-                    x_grid_pos = xbot + gridSize * (0 : xn - 1);
-                    y_grid_pos = ybot + gridSize * (0 : yn - 1);
-                    z_grid_pos = zbot + gridSize * (0 : zn - 1);
+                    x_grid_pos = xbot + gridSize * ((-1 : xn) + 0.5);
+                    y_grid_pos = ybot + gridSize * ((-1 : yn) + 0.5);
+                    z_grid_pos = zbot + gridSize * ((-1 : zn) + 0.5);
                     
-                    x_diff = repmat(x_grid_pos, length(x), 1) - repmat(x', 1, length(x_grid_pos));
-                    y_diff = repmat(y_grid_pos, length(y), 1) - repmat(y', 1, length(y_grid_pos));
-                    z_diff = repmat(z_grid_pos, length(z), 1) - repmat(z', 1, length(z_grid_pos));
+                    grid_x = repmat(x_grid_pos, N, 1);
+                    [x_top_indices(:, 1), x_top_indices(:, 2)] = find(grid_x >= (x + this.data.radius)' & grid_x < (x + this.data.radius + gridSize)');
+                    [x_bot_indices(:, 1), x_bot_indices(:, 2)] = find(grid_x <= (x - this.data.radius)' & grid_x > (x - this.data.radius - gridSize)');
                     
-                    [~, x_top_indices] = ind2sub([length(x), length(x_grid_pos)], find(x_diff >= this.data.radius' & x_diff < this.data.radius' + gridSize));
-                    [~, x_bot_indices] = ind2sub([length(x), length(x_grid_pos)], find(x_diff <= -this.data.radius' & x_diff > -this.data.radius' - xfslice));
-                    [~, y_top_indices] = ind2sub([length(y), length(y_grid_pos)], find(y_diff >= this.data.radius' & y_diff < this.data.radius' + yfslice));
-                    [~, y_bot_indices] = ind2sub([length(y), length(y_grid_pos)], find(y_diff <= -this.data.radius' & y_diff > -this.data.radius' - yfslice));
-                    [~, z_top_indices] = ind2sub([length(z), length(z_grid_pos)], find(z_diff >= this.data.radius' & z_diff < this.data.radius' + zfslice));
-                    [~, z_bot_indices] = ind2sub([length(z), length(z_grid_pos)], find(z_diff <= -this.data.radius' & z_diff > -this.data.radius' - zfslice));
+                    grid_y = repmat(y_grid_pos, N, 1);
+                    [y_top_indices(:, 1), y_top_indices(:, 2)] = find(grid_y >= (y + this.data.radius)' & grid_y < (y + this.data.radius + gridSize)');
+                    [y_bot_indices(:, 1), y_bot_indices(:, 2)] = find(grid_y <= (y - this.data.radius)' & grid_y > (y - this.data.radius - gridSize)');
+                    
+                    grid_z = repmat(z_grid_pos, N, 1);
+                    [z_top_indices(:, 1), z_top_indices(:, 2)] = find(grid_z >= (z + this.data.radius)' & grid_z < (z + this.data.radius + gridSize)');
+                    [z_bot_indices(:, 1), z_bot_indices(:, 2)] = find(grid_z <= (z - this.data.radius)' & grid_z > (z - this.data.radius - gridSize)');
+                    
+                    x_top_indices = sortrows(x_top_indices);
+                    y_top_indices = sortrows(y_top_indices);
+                    z_top_indices = sortrows(z_top_indices);
+                    x_bot_indices = sortrows(x_bot_indices);
+                    y_bot_indices = sortrows(y_bot_indices);
+                    z_bot_indices = sortrows(z_bot_indices);
                     
                     [xf_grid, yf_grid, zf_grid] = meshgrid(x_grid_pos, y_grid_pos, z_grid_pos);
                     
-%                     xf_grid = permute(xf_grid, [2,1,3]);
-%                     yf_grid = permute(yf_grid, [2,1,3]);
-%                     zf_grid = permute(zf_grid, [2,1,3]);
+                    xf_grid = permute(xf_grid, [2, 1, 3]);
+                    yf_grid = permute(yf_grid, [2, 1, 3]);
+                    zf_grid = permute(zf_grid, [2, 1, 3]);
                     
-                    tic
+                    Elec_grid = zeros(xn + 2, yn + 2, zn + 2);
                     for k = 1 : N
                         
-                        Elec_frac = zeros(x_top_indices(k) - x_bot_indices(k) + 1, y_top_indices(k)-y_bot_indices(k)+1, z_top_indices(k)-z_bot_indices(k)+1);
+                        Elec_frac = zeros(x_top_indices(k, 2)-x_bot_indices(k, 2)+1, y_top_indices(k, 2)-y_bot_indices(k, 2)+1, z_top_indices(k, 2)-z_bot_indices(k, 2)+1);
                         
-                        atomdist = (xf_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) - x(k)).^2 ...
-                            + (yf_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) - y(k)).^2 ...
-                            + (zf_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) - z(k)).^2;
+                        atomdist = (xf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - x(k)).^2 ...
+                            + (yf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - y(k)).^2 ...
+                            + (zf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - z(k)).^2;
                         
                         ind_list = (atomdist <= this.data.radius(k)^2);
                         
-                        Elec_frac(ind_list) = (this.data.electron(k)*fvol)/((4/3)*pi*this.data.radius(k)^3);
+                        Elec_frac(ind_list) = (this.data.electron(k) * gridSize^3)/(4 / 3 * pi * this.data.radius(k)^3);
                         
-                        Elec_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k))...
-                            = Elec_grid(x_bot_indices(k):x_top_indices(k),y_bot_indices(k):y_top_indices(k), z_bot_indices(k):z_top_indices(k)) + Elec_frac;
-                        
+                        Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2))...
+                            = Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) + Elec_frac;
+                         
                     end
                     
-                    toc
-                    
-                    ED_prof = zeros(zfgridnum,3);
-                    parray = zeros(zfgridnum,1);
-                    barray = zeros(zfgridnum,1);
-                    earray = zeros(zfgridnum,1);
-                    tote = 0;
-                    
-                    numgridarea = any(Elec_grid,3);
+                    numgridarea = any(Elec_grid, 3);
                     minareagrid = sum(numgridarea(:));
                     
-                    for lay = 1:zfgridnum
-                        
-                        ED_prof(lay,1) = zf_grid(1,1,lay);
-                        ED_prof(lay,2) = sum(sum(Elec_grid(:,:,lay)))/(fvol*xfgridnum*yfgridnum);
-                        ED_prof(lay,3) = sum(sum(Elec_grid(:,:,lay)))/(fvol*minareagrid);
-                        ED_prof(lay,4) = (xfgridnum*yfgridnum-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*xfgridnum*yfgridnum);
-                        ED_prof(lay,5) = (minareagrid-nnz(Elec_grid(:,:,lay)))*fvol/(fvol*minareagrid);
-                        
-                        parray(lay) = nnz(Elec_grid(:,:,lay))*fvol;
-                        barray(lay) = (minareagrid-nnz(Elec_grid(:,:,lay)))*fvol;
-                        earray(lay) = sum(sum(Elec_grid(:,:,lay)));
-                        tote = tote + earray(lay);
-                    end
-                    
-                    ED_profout.(sprintf('t%03dp%03d',theta_rot,phi_rot)) = flipud(ED_prof);
-                    R.etotpdb = etotpdb;
-                    display(etotpdb);
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xyarea = abs(xtop-xbot)*abs(ytop-ybot);
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).minarea = minareagrid*xfslice*yfslice;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).etot = earray;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).tote = tote;
-                    display(sum(tote));
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).elecdif = (tote - etotpdb);
-                    display(sum(tote) - etotpdb);
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).provol = parray;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).bufvol = barray;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).xfgridnum = xfgridnum;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).yfgridnum = yfgridnum;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).zfgridnum = zfgridnum;
-                    R.(sprintf('t%03dp%03d',theta_rot,phi_rot)).fvol = fvol;
+                    this.ed.area(i, j) = minareagrid * gridSize^2;
+                    profile = zeros(zn+2, 3);
+                    profile(:, 1) = z_grid_pos';
+                    profile(:, 2) = squeeze(sum(sum(Elec_grid, 1), 2)) / (gridSize^3 * minareagrid);
+                    logic_elec_grid = Elec_grid > 0;
+                    profile(:, 3) = (minareagrid - squeeze(sum(sum(logic_elec_grid, 1), 2))) / minareagrid;
+                    this.ed.profiles{i, j} = profile;
                     
                 end
             end
+            toc;
             
+        end
+        
+        function [profile, area] = generateSingleEdProfile(this, theta, phi)
             
+            if nargin == 1
+                theta = 0;
+                phi = 0;
+            end
             
+            gridSize = 0.5;
+            
+            N = length(this.data.x);
+            
+            positions = [1, 0, 0; 0, cos(theta), -sin(theta); 0, sin(theta), cos(theta)]...
+                * [cos(phi), -sin(phi), 0; sin(phi), cos(phi), 0; 0, 0, 1]...
+                * [this.data.x; this.data.y; this.data.z];
+            
+            x = positions(1, :);
+            y = positions(2, :);
+            z = positions(3, :);
+            
+            xtop = max(x + this.data.radius) + 1e-10;
+            xbot = min(x - this.data.radius) - 1e-10;
+            ytop = max(y + this.data.radius) + 1e-10;
+            ybot = min(y - this.data.radius) - 1e-10;
+            ztop = max(z + this.data.radius) + 1e-10;
+            zbot = min(z - this.data.radius) - 1e-10;
+            
+            xn = ceil((xtop - xbot) / gridSize);
+            yn = ceil((ytop - ybot) / gridSize);
+            zn = ceil((ztop - zbot) / gridSize);
+            
+            x_grid_pos = xbot + gridSize * ((-1 : xn) + 0.5);
+            y_grid_pos = ybot + gridSize * ((-1 : yn) + 0.5);
+            z_grid_pos = zbot + gridSize * ((-1 : zn) + 0.5);
+            
+            grid_x = repmat(x_grid_pos, N, 1);
+            [x_top_indices(:, 1), x_top_indices(:, 2)] = find(grid_x >= (x + this.data.radius)' & grid_x < (x + this.data.radius + gridSize)');
+            [x_bot_indices(:, 1), x_bot_indices(:, 2)] = find(grid_x <= (x - this.data.radius)' & grid_x > (x - this.data.radius - gridSize)');
+            
+            grid_y = repmat(y_grid_pos, N, 1);
+            [y_top_indices(:, 1), y_top_indices(:, 2)] = find(grid_y >= (y + this.data.radius)' & grid_y < (y + this.data.radius + gridSize)');
+            [y_bot_indices(:, 1), y_bot_indices(:, 2)] = find(grid_y <= (y - this.data.radius)' & grid_y > (y - this.data.radius - gridSize)');
+            
+            grid_z = repmat(z_grid_pos, N, 1);
+            [z_top_indices(:, 1), z_top_indices(:, 2)] = find(grid_z >= (z + this.data.radius)' & grid_z < (z + this.data.radius + gridSize)');
+            [z_bot_indices(:, 1), z_bot_indices(:, 2)] = find(grid_z <= (z - this.data.radius)' & grid_z > (z - this.data.radius - gridSize)');
+            
+            x_top_indices = sortrows(x_top_indices);
+            y_top_indices = sortrows(y_top_indices);
+            z_top_indices = sortrows(z_top_indices);
+            x_bot_indices = sortrows(x_bot_indices);
+            y_bot_indices = sortrows(y_bot_indices);
+            z_bot_indices = sortrows(z_bot_indices);
+            
+            [xf_grid, yf_grid, zf_grid] = meshgrid(x_grid_pos, y_grid_pos, z_grid_pos);
+            
+            xf_grid = permute(xf_grid, [2, 1, 3]);
+            yf_grid = permute(yf_grid, [2, 1, 3]);
+            zf_grid = permute(zf_grid, [2, 1, 3]);
+            
+            Elec_grid = zeros(xn + 2, yn + 2, zn + 2);
+            for k = 1 : N
+                
+                Elec_frac = zeros(x_top_indices(k, 2)-x_bot_indices(k, 2)+1, y_top_indices(k, 2)-y_bot_indices(k, 2)+1, z_top_indices(k, 2)-z_bot_indices(k, 2)+1);
+                
+                atomdist = (xf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - x(k)).^2 ...
+                    + (yf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - y(k)).^2 ...
+                    + (zf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - z(k)).^2;
+                
+                ind_list = (atomdist <= this.data.radius(k)^2);
+                
+                Elec_frac(ind_list) = (this.data.electron(k) * gridSize^3)/(4 / 3 * pi * this.data.radius(k)^3);
+                
+                Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2))...
+                    = Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) + Elec_frac;
+                
+            end
+            
+            numgridarea = any(Elec_grid, 3);
+            minareagrid = sum(numgridarea(:));
+            
+            area = minareagrid * gridSize^2;
+            profile = zeros(zn+2, 3);
+            profile(:, 1) = z_grid_pos';
+            profile(:, 2) = squeeze(sum(sum(Elec_grid, 1), 2)) / (gridSize^3 * minareagrid);
+            logic_elec_grid = Elec_grid > 0;
+            profile(:, 3) = (minareagrid - squeeze(sum(sum(logic_elec_grid, 1), 2))) / minareagrid;
             
         end
         
@@ -173,6 +241,21 @@ classdef ProteinEd < handle
         function mw = molecularWeight(this)
             
             mw = sum(this.data.mass);
+            
+        end
+        
+        function grids = generateGrid(this)
+            
+            pos_bottom = min(positions - repmat(this.data.radius, 3, 1), [], 2) - 1e-10;
+            pos_top = max(positions + repmat(this.data.radius, 3, 1), [], 2) + 1e-10;
+            sizes = pos_top - pos_bottom;
+            dimensions = ceil(sizes / this.ed.gridSize);
+            
+            grids = cell(1, 3);
+            
+            for i = 1 : 3
+                grids{i} = pos_bottom(i, :) + this.ed.gridSize * (0 : dimensions(i));
+            end
             
         end
         
