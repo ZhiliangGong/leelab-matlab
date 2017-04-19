@@ -266,10 +266,10 @@ elseif ProtFlag == 0
 
                 z_min = z_profile(j) - za;
                 if j == 1
-                    chem = chem + (e_dens(j)/2)*erf(z_min/(sqrt(2)*sigma));
+                    chem = chem + (e_dens(j)/2) * erf(z_min/(sqrt(2)*sigma));
                 else
                     z_max = z_profile(j-1) - za;
-                    chem = chem + (e_dens(j)/2)*(erf(z_max/(sqrt(2)*sigma))-erf(z_min/(sqrt(2)*sigma)));
+                    chem = chem + (e_dens(j)/2) * (erf(z_max/(sqrt(2) * sigma)) - erf(z_min/(sqrt(2) * sigma)));
                 end
 
             end

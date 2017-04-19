@@ -1,10 +1,6 @@
 function [ oRef, oRefoRf, ocRefoRf, qc, qzoff] = Ref_reduce3_man(Ref, qc_cut, qzoff, qc)
 %Function for processing Raw Reflectivity Data
 
-
-
-format long
-
 %Determine data points below qc:
 
 ind = find(Ref(:,1)<=qc_cut);

@@ -400,6 +400,25 @@ classdef Reflectivity < handle
             
         end
         
+        function o = bestFitParametersLargeBox(this)
+            
+            [I, J] = find(this.lgboxProteinFit.chi == min(this.lgboxProteinFit.chi(:)), 1);
+            
+            o.thetaIndex = I;
+            o.phiIndex = J;
+            o.theta = this.lgboxEd.theta(I);
+            o.phi = this.lgboxEd.phi(J);
+            o.coverage = this.lgboxProteinFit.coverage(I, J);
+            o.position = this.lgboxProteinFit.position(I, J);
+            o.tailLength = this.lgboxProteinFit.tailLength(I, J);
+            o.headLength = this.lgboxProteinFit.headLength(I, J);
+            o.tailEd = this.lgboxProteinFit.tailEd(I, J);
+            o.headEd = this.lgboxProteinFit.headEd(I, J);
+            o.data = this.lgboxProteinFit.refnorm;
+            o.fit = this.lgboxProteinFit.ref_fit;
+            
+        end
+        
         % plot
         
         function plotLipidFit(this)
@@ -428,9 +447,19 @@ classdef Reflectivity < handle
             
         end
         
-        function plotProteinFit(this)
+        function plotProteinFit(this, edModel)
             
-            o = this.bestFitParameters();
+            if nargin == 1
+                edModel = 'small-box';
+            end
+            
+            switch edModel
+                case 'small-box'
+                    o = this.bestFitParameters();
+                case 'large-box'
+                    o = this.bestFitParametersLargeBox();
+            end
+            
             this.plotDataAndFit(this.proteinFit.refnorm, this.proteinFit.ref_fit{o.thetaIndex, o.phiIndex});
             
         end

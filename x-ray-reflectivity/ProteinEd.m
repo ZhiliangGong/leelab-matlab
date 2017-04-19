@@ -3,7 +3,7 @@ classdef ProteinEd < handle
     properties
         
         file
-        data
+        pdb
         ed
         
     end
@@ -19,19 +19,19 @@ classdef ProteinEd < handle
             
             this.file = file;
             text = fileread(file);
-            this.data = processPdbFile(text);
+            this.pdb = processPdbFile(text);
             
             % get the mass and electrons of each atom as a vector
-            n = length(this.data.x);
-            this.data.mass = zeros(1, n);
-            this.data.electron = zeros(1, n);
-            this.data.radius = zeros(1, n);
+            n = length(this.pdb.x);
+            this.pdb.mass = zeros(1, n);
+            this.pdb.electron = zeros(1, n);
+            this.pdb.radius = zeros(1, n);
             [massTable, electronTable] = this.getPeriodicTable();
             radiusTable = this.getAtomRadiusTable();
             for i = 1 : n
-                this.data.mass(i) = massTable(this.data.atoms(i));
-                this.data.electron(i) = electronTable(this.data.atoms(i));
-                this.data.radius(i) = radiusTable(this.data.atoms(i));
+                this.pdb.mass(i) = massTable(this.pdb.atoms(i));
+                this.pdb.electron(i) = electronTable(this.pdb.atoms(i));
+                this.pdb.radius(i) = radiusTable(this.pdb.atoms(i));
             end
             
         end
@@ -52,7 +52,7 @@ classdef ProteinEd < handle
             n = length(phi);
             this.ed.area = zeros(m, n);
             this.ed.profiles = cell(m, n);
-            N = length(this.data.x);
+            N = length(this.pdb.x);
             
             tic;
             for i = 1 : m
@@ -60,18 +60,18 @@ classdef ProteinEd < handle
                     
                     positions = [1, 0, 0; 0, cos(theta(i)), -sin(theta(i)); 0, sin(theta(i)), cos(theta(i))]...
                         * [cos(phi(j)), -sin(phi(j)), 0; sin(phi(j)), cos(phi(j)), 0; 0, 0, 1]...
-                        * [this.data.x; this.data.y; this.data.z];
+                        * [this.pdb.x; this.pdb.y; this.pdb.z];
                     
                     x = positions(1, :);
                     y = positions(2, :);
                     z = positions(3, :);
                     
-                    xtop = max(x + this.data.radius) + 1e-10;
-                    xbot = min(x - this.data.radius) - 1e-10;
-                    ytop = max(y + this.data.radius) + 1e-10;
-                    ybot = min(y - this.data.radius) - 1e-10;
-                    ztop = max(z + this.data.radius) + 1e-10;
-                    zbot = min(z - this.data.radius) - 1e-10;
+                    xtop = max(x + this.pdb.radius) + 1e-10;
+                    xbot = min(x - this.pdb.radius) - 1e-10;
+                    ytop = max(y + this.pdb.radius) + 1e-10;
+                    ybot = min(y - this.pdb.radius) - 1e-10;
+                    ztop = max(z + this.pdb.radius) + 1e-10;
+                    zbot = min(z - this.pdb.radius) - 1e-10;
                     
                     xn = ceil((xtop - xbot) / gridSize);
                     yn = ceil((ytop - ybot) / gridSize);
@@ -82,16 +82,16 @@ classdef ProteinEd < handle
                     z_grid_pos = zbot + gridSize * ((-1 : zn) + 0.5);
                     
                     grid_x = repmat(x_grid_pos, N, 1);
-                    [x_top_indices(:, 1), x_top_indices(:, 2)] = find(grid_x >= (x + this.data.radius)' & grid_x < (x + this.data.radius + gridSize)');
-                    [x_bot_indices(:, 1), x_bot_indices(:, 2)] = find(grid_x <= (x - this.data.radius)' & grid_x > (x - this.data.radius - gridSize)');
+                    [x_top_indices(:, 1), x_top_indices(:, 2)] = find(grid_x >= (x + this.pdb.radius)' & grid_x < (x + this.pdb.radius + gridSize)');
+                    [x_bot_indices(:, 1), x_bot_indices(:, 2)] = find(grid_x <= (x - this.pdb.radius)' & grid_x > (x - this.pdb.radius - gridSize)');
                     
                     grid_y = repmat(y_grid_pos, N, 1);
-                    [y_top_indices(:, 1), y_top_indices(:, 2)] = find(grid_y >= (y + this.data.radius)' & grid_y < (y + this.data.radius + gridSize)');
-                    [y_bot_indices(:, 1), y_bot_indices(:, 2)] = find(grid_y <= (y - this.data.radius)' & grid_y > (y - this.data.radius - gridSize)');
+                    [y_top_indices(:, 1), y_top_indices(:, 2)] = find(grid_y >= (y + this.pdb.radius)' & grid_y < (y + this.pdb.radius + gridSize)');
+                    [y_bot_indices(:, 1), y_bot_indices(:, 2)] = find(grid_y <= (y - this.pdb.radius)' & grid_y > (y - this.pdb.radius - gridSize)');
                     
                     grid_z = repmat(z_grid_pos, N, 1);
-                    [z_top_indices(:, 1), z_top_indices(:, 2)] = find(grid_z >= (z + this.data.radius)' & grid_z < (z + this.data.radius + gridSize)');
-                    [z_bot_indices(:, 1), z_bot_indices(:, 2)] = find(grid_z <= (z - this.data.radius)' & grid_z > (z - this.data.radius - gridSize)');
+                    [z_top_indices(:, 1), z_top_indices(:, 2)] = find(grid_z >= (z + this.pdb.radius)' & grid_z < (z + this.pdb.radius + gridSize)');
+                    [z_bot_indices(:, 1), z_bot_indices(:, 2)] = find(grid_z <= (z - this.pdb.radius)' & grid_z > (z - this.pdb.radius - gridSize)');
                     
                     x_top_indices = sortrows(x_top_indices);
                     y_top_indices = sortrows(y_top_indices);
@@ -115,9 +115,9 @@ classdef ProteinEd < handle
                             + (yf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - y(k)).^2 ...
                             + (zf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - z(k)).^2;
                         
-                        ind_list = (atomdist <= this.data.radius(k)^2);
+                        ind_list = (atomdist <= this.pdb.radius(k)^2);
                         
-                        Elec_frac(ind_list) = (this.data.electron(k) * gridSize^3)/(4 / 3 * pi * this.data.radius(k)^3);
+                        Elec_frac(ind_list) = (this.pdb.electron(k) * gridSize^3)/(4 / 3 * pi * this.pdb.radius(k)^3);
                         
                         Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2))...
                             = Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) + Elec_frac;
@@ -150,22 +150,22 @@ classdef ProteinEd < handle
             
             gridSize = 0.5;
             
-            N = length(this.data.x);
+            N = length(this.pdb.x);
             
             positions = [1, 0, 0; 0, cos(theta), -sin(theta); 0, sin(theta), cos(theta)]...
                 * [cos(phi), -sin(phi), 0; sin(phi), cos(phi), 0; 0, 0, 1]...
-                * [this.data.x; this.data.y; this.data.z];
+                * [this.pdb.x; this.pdb.y; this.pdb.z];
             
             x = positions(1, :);
             y = positions(2, :);
             z = positions(3, :);
             
-            xtop = max(x + this.data.radius) + 1e-10;
-            xbot = min(x - this.data.radius) - 1e-10;
-            ytop = max(y + this.data.radius) + 1e-10;
-            ybot = min(y - this.data.radius) - 1e-10;
-            ztop = max(z + this.data.radius) + 1e-10;
-            zbot = min(z - this.data.radius) - 1e-10;
+            xtop = max(x + this.pdb.radius) + 1e-10;
+            xbot = min(x - this.pdb.radius) - 1e-10;
+            ytop = max(y + this.pdb.radius) + 1e-10;
+            ybot = min(y - this.pdb.radius) - 1e-10;
+            ztop = max(z + this.pdb.radius) + 1e-10;
+            zbot = min(z - this.pdb.radius) - 1e-10;
             
             xn = ceil((xtop - xbot) / gridSize);
             yn = ceil((ytop - ybot) / gridSize);
@@ -176,16 +176,16 @@ classdef ProteinEd < handle
             z_grid_pos = zbot + gridSize * ((-1 : zn) + 0.5);
             
             grid_x = repmat(x_grid_pos, N, 1);
-            [x_top_indices(:, 1), x_top_indices(:, 2)] = find(grid_x >= (x + this.data.radius)' & grid_x < (x + this.data.radius + gridSize)');
-            [x_bot_indices(:, 1), x_bot_indices(:, 2)] = find(grid_x <= (x - this.data.radius)' & grid_x > (x - this.data.radius - gridSize)');
+            [x_top_indices(:, 1), x_top_indices(:, 2)] = find(grid_x >= (x + this.pdb.radius)' & grid_x < (x + this.pdb.radius + gridSize)');
+            [x_bot_indices(:, 1), x_bot_indices(:, 2)] = find(grid_x <= (x - this.pdb.radius)' & grid_x > (x - this.pdb.radius - gridSize)');
             
             grid_y = repmat(y_grid_pos, N, 1);
-            [y_top_indices(:, 1), y_top_indices(:, 2)] = find(grid_y >= (y + this.data.radius)' & grid_y < (y + this.data.radius + gridSize)');
-            [y_bot_indices(:, 1), y_bot_indices(:, 2)] = find(grid_y <= (y - this.data.radius)' & grid_y > (y - this.data.radius - gridSize)');
+            [y_top_indices(:, 1), y_top_indices(:, 2)] = find(grid_y >= (y + this.pdb.radius)' & grid_y < (y + this.pdb.radius + gridSize)');
+            [y_bot_indices(:, 1), y_bot_indices(:, 2)] = find(grid_y <= (y - this.pdb.radius)' & grid_y > (y - this.pdb.radius - gridSize)');
             
             grid_z = repmat(z_grid_pos, N, 1);
-            [z_top_indices(:, 1), z_top_indices(:, 2)] = find(grid_z >= (z + this.data.radius)' & grid_z < (z + this.data.radius + gridSize)');
-            [z_bot_indices(:, 1), z_bot_indices(:, 2)] = find(grid_z <= (z - this.data.radius)' & grid_z > (z - this.data.radius - gridSize)');
+            [z_top_indices(:, 1), z_top_indices(:, 2)] = find(grid_z >= (z + this.pdb.radius)' & grid_z < (z + this.pdb.radius + gridSize)');
+            [z_bot_indices(:, 1), z_bot_indices(:, 2)] = find(grid_z <= (z - this.pdb.radius)' & grid_z > (z - this.pdb.radius - gridSize)');
             
             x_top_indices = sortrows(x_top_indices);
             y_top_indices = sortrows(y_top_indices);
@@ -209,9 +209,9 @@ classdef ProteinEd < handle
                     + (yf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - y(k)).^2 ...
                     + (zf_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) - z(k)).^2;
                 
-                ind_list = (atomdist <= this.data.radius(k)^2);
+                ind_list = (atomdist <= this.pdb.radius(k)^2);
                 
-                Elec_frac(ind_list) = (this.data.electron(k) * gridSize^3)/(4 / 3 * pi * this.data.radius(k)^3);
+                Elec_frac(ind_list) = (this.pdb.electron(k) * gridSize^3)/(4 / 3 * pi * this.pdb.radius(k)^3);
                 
                 Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2))...
                     = Elec_grid(x_bot_indices(k, 2):x_top_indices(k, 2),y_bot_indices(k, 2):y_top_indices(k, 2), z_bot_indices(k, 2):z_top_indices(k, 2)) + Elec_frac;
@@ -234,20 +234,20 @@ classdef ProteinEd < handle
         
         function total = totalElectron(this)
             
-            total = sum(this.data.electron);
+            total = sum(this.pdb.electron);
             
         end
         
         function mw = molecularWeight(this)
             
-            mw = sum(this.data.mass);
+            mw = sum(this.pdb.mass);
             
         end
         
         function grids = generateGrid(this)
             
-            pos_bottom = min(positions - repmat(this.data.radius, 3, 1), [], 2) - 1e-10;
-            pos_top = max(positions + repmat(this.data.radius, 3, 1), [], 2) + 1e-10;
+            pos_bottom = min(positions - repmat(this.pdb.radius, 3, 1), [], 2) - 1e-10;
+            pos_top = max(positions + repmat(this.pdb.radius, 3, 1), [], 2) + 1e-10;
             sizes = pos_top - pos_bottom;
             dimensions = ceil(sizes / this.ed.gridSize);
             
@@ -256,6 +256,37 @@ classdef ProteinEd < handle
             for i = 1 : 3
                 grids{i} = pos_bottom(i, :) + this.ed.gridSize * (0 : dimensions(i));
             end
+            
+        end
+        
+        function visualize(this, ax, theta, phi, sel_emphasize)
+            
+            if isempty(theta)
+                theta = 0;
+            end
+            
+            if isempty(phi)
+                phi = 0;
+            end
+            
+            if isempty(ax)
+                ax = gca;
+            end
+            
+            sel = this.pdb.atoms == 'C';
+            
+            [xdata, ydata, zdata] = this.rotateThetaPhi(this.pdb.x(sel), this.pdb.y(sel), this.pdb.z(sel), theta, phi);
+            
+            plot3(ax, xdata, ydata, zdata, '-o', 'linewidth', 2, 'MarkerFaceColor', 'cyan');
+            
+            if ~ isempty(sel_emphasize)
+                [xdata, ydata, zdata] = this.rotateThetaPhi(this.pdb.x(sel_emphasize), this.pdb.y(sel_emphasize), this.pdb.z(sel_emphasize), theta, phi);
+                plot3(ax, xdata, ydata, zdata, '-o', 'linewidth', 2, 'MarkerFaceColor', 'm', 'color', 'r');
+            end
+            
+            xlabel('$$ y (\AA) $$', 'fontsize', 14, 'interpreter', 'latex');
+            ylabel('$$ x (\AA) $$', 'fontsize', 14, 'interpreter', 'latex');
+            zlabel('$$ z (\AA) $$', 'fontsize', 14, 'interpreter', 'latex');
             
         end
         
@@ -289,6 +320,18 @@ classdef ProteinEd < handle
             radius('O') = 1.52;
             radius('S') = 1.8;
             radius('P') = 1.95;
+            
+        end
+        
+        function [x, y, z] = rotateThetaPhi(x, y, z, theta, phi)
+            
+            positions = [1, 0, 0; 0, cos(theta), -sin(theta); 0, sin(theta), cos(theta)]...
+                * [cos(phi), -sin(phi), 0; sin(phi), cos(phi), 0; 0, 0, 1]...
+                * [x; y; z];
+            
+            x = positions(1, :);
+            y = positions(2, :);
+            z = positions(3, :);
             
         end
         
